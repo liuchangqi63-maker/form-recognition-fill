@@ -3,16 +3,22 @@ const { getDefaultConfig } = require("expo/metro-config");
 const { withNativeWind } = require("nativewind/metro");
 
 const config = getDefaultConfig(__dirname);
-const cssInteropCache = path.resolve(
-  __dirname,
-  "node_modules/react-native-css-interop/.cache",
+
+const cssInteropRoot = path.dirname(
+  require.resolve("react-native-css-interop/package.json"),
 );
+const cssInteropCache = path.join(cssInteropRoot, ".cache");
 
-config.watchFolders = [...(config.watchFolders ?? []), cssInteropCache];
-
-module.exports = withNativeWind(config, {
+const nativewindConfig = withNativeWind(config, {
   input: "./global.css",
   // Force write CSS to file system instead of virtual modules
   // This fixes iOS styling issues in development mode
   forceWriteFileSystem: true,
 });
+
+nativewindConfig.watchFolders = [
+  ...(nativewindConfig.watchFolders ?? []),
+  cssInteropCache,
+];
+
+module.exports = nativewindConfig;
