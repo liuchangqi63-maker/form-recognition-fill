@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
   RefreshControl,
+  useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -27,6 +28,9 @@ export default function HomeScreen() {
   const router = useRouter();
   const { documents, loading, deleteDocument, refreshDocuments } = useDocuments();
   const [refreshing, setRefreshing] = useState(false);
+  const { width } = useWindowDimensions();
+  const isWeb = Platform.OS === 'web';
+  const numColumns = isWeb ? (width >= 1200 ? 3 : width >= 900 ? 2 : 1) : 1;
 
   // Refresh when screen comes into focus
   useFocusEffect(
@@ -71,13 +75,21 @@ export default function HomeScreen() {
     router.push('/create' as any);
   };
 
-  const renderItem = ({ item }: { item: Document }) => (
-    <DocumentCard
-      document={item}
-      onPress={() => handleDocumentPress(item)}
-      onLongPress={() => handleDocumentLongPress(item)}
-    />
-  );
+  const renderItem = ({ item }: { item: Document }) => {
+    const card = (
+      <DocumentCard
+        document={item}
+        onPress={() => handleDocumentPress(item)}
+        onLongPress={() => handleDocumentLongPress(item)}
+      />
+    );
+
+    if (!isWeb || numColumns === 1) {
+      return card;
+    }
+
+    return <View style={styles.cardWrapper}>{card}</View>;
+  };
 
   if (loading) {
     return (
@@ -89,42 +101,61 @@ export default function HomeScreen() {
 
   return (
     <ScreenContainer className="flex-1">
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.foreground }]}>我的表格</Text>
-        <Text style={[styles.subtitle, { color: colors.muted }]}>
-          {documents.length > 0 ? `${documents.length} 个文档` : '开始创建您的第一个表格'}
-        </Text>
+      <View style={[styles.webContainer, isWeb && styles.webContainerCentered]}>
+        {/* Header */}
+        <View style={[styles.header, isWeb && styles.headerWeb]}>
+          <View>
+            <Text style={[styles.title, { color: colors.foreground }]}>我的表格</Text>
+            <Text style={[styles.subtitle, { color: colors.muted }]}>
+              {documents.length > 0 ? `${documents.length} 个文档` : '开始创建您的第一个表格'}
+            </Text>
+          </View>
+          {isWeb && (
+            <TouchableOpacity
+              onPress={handleCreateNew}
+              activeOpacity={0.8}
+              style={[styles.headerButton, { backgroundColor: colors.primary }]}
+            >
+              <IconSymbol name="plus.circle.fill" size={18} color="#fff" />
+              <Text style={styles.headerButtonText}>创建表格</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Document List */}
+        {documents.length > 0 ? (
+          <FlatList
+            data={documents}
+            key={numColumns}
+            keyExtractor={(item) => item.id}
+            renderItem={renderItem}
+            numColumns={numColumns}
+            columnWrapperStyle={
+              isWeb && numColumns > 1 ? styles.columnWrapper : undefined
+            }
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={handleRefresh}
+                tintColor={colors.primary}
+              />
+            }
+          />
+        ) : (
+          <EmptyState
+            icon="📊"
+            title="还没有表格"
+            description="从图片识别表格或创建空白表格，开始您的智能表格之旅"
+            actionText="创建表格"
+            onAction={handleCreateNew}
+          />
+        )}
       </View>
 
-      {/* Document List */}
-      {documents.length > 0 ? (
-        <FlatList
-          data={documents}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              tintColor={colors.primary}
-            />
-          }
-        />
-      ) : (
-        <EmptyState
-          icon="📊"
-          title="还没有表格"
-          description="从图片识别表格或创建空白表格，开始您的智能表格之旅"
-          actionText="创建表格"
-          onAction={handleCreateNew}
-        />
-      )}
-
       {/* Floating Action Button */}
-      {documents.length > 0 && (
+      {!isWeb && documents.length > 0 && (
         <TouchableOpacity
           onPress={handleCreateNew}
           activeOpacity={0.8}
@@ -138,10 +169,38 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  webContainer: {
+    flex: 1,
+  },
+  webContainerCentered: {
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 1200,
+    paddingHorizontal: 24,
+  },
   header: {
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 16,
+  },
+  headerWeb: {
+    paddingHorizontal: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  headerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 999,
+    gap: 8,
+  },
+  headerButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   title: {
     fontSize: 34,
@@ -154,6 +213,13 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: 16,
     paddingBottom: 100,
+  },
+  columnWrapper: {
+    marginHorizontal: -6,
+  },
+  cardWrapper: {
+    flex: 1,
+    marginHorizontal: 6,
   },
   fab: {
     position: 'absolute',
