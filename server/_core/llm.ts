@@ -384,14 +384,17 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     output_schema,
     responseFormat,
     response_format,
+    maxTokens,
+    max_tokens,
   } = params;
 
   const { systemInstruction, contents } = splitGeminiMessages(messages);
+  const resolvedMaxTokens = maxTokens ?? max_tokens ?? 32768;
 
   const payload: Record<string, unknown> = {
     contents,
     generationConfig: {
-      maxOutputTokens: 32768,
+      maxOutputTokens: resolvedMaxTokens,
     },
   };
 
