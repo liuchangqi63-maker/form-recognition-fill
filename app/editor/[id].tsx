@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Platform,
   Share,
+  useWindowDimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -27,6 +28,9 @@ export default function EditorScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { getDocument, updateDocument, deleteDocument } = useDocuments();
+  const { width } = useWindowDimensions();
+  const isWeb = Platform.OS === 'web';
+  const isWide = isWeb && width >= 1100;
   
   const [document, setDocument] = useState<Document | null>(null);
   const [tableData, setTableData] = useState<TableData | null>(null);
@@ -190,52 +194,59 @@ export default function EditorScreen() {
 
   return (
     <ScreenContainer edges={['top', 'left', 'right']}>
-      {/* Header */}
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={handleBack} style={styles.headerButton}>
-          <IconSymbol name="arrow.left" size={24} color={colors.foreground} />
-        </TouchableOpacity>
-        
-        <View style={styles.headerCenter}>
-          <Text style={[styles.headerTitle, { color: colors.foreground }]} numberOfLines={1}>
-            {document.title || '未命名文档'}
-          </Text>
-          {hasChanges && (
-            <View style={[styles.unsavedBadge, { backgroundColor: colors.warning }]}>
-              <Text style={styles.unsavedText}>未保存</Text>
-            </View>
-          )}
-        </View>
+      <View style={[styles.webContainer, isWeb && styles.webContainerCentered]}>
+        {/* Header */}
+        <View style={[styles.header, { borderBottomColor: colors.border }]}
+        >
+          <TouchableOpacity onPress={handleBack} style={styles.headerButton}>
+            <IconSymbol name="arrow.left" size={24} color={colors.foreground} />
+          </TouchableOpacity>
 
-        <View style={styles.headerActions}>
-          <TouchableOpacity onPress={handleSave} style={styles.headerButton}>
-            <Text style={[styles.saveText, { color: hasChanges ? colors.primary : colors.muted }]}>
-              保存
+          <View style={styles.headerCenter}>
+            <Text style={[styles.headerTitle, { color: colors.foreground }]} numberOfLines={1}>
+              {document.title || '未命名文档'}
             </Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={handleShare} style={styles.headerButton}>
-            <IconSymbol name="square.and.arrow.up" size={22} color={colors.foreground} />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={handleDelete} style={styles.headerButton}>
-            <IconSymbol name="trash.fill" size={22} color={colors.error} />
-          </TouchableOpacity>
+            {hasChanges && (
+              <View style={[styles.unsavedBadge, { backgroundColor: colors.warning }]}>
+                <Text style={styles.unsavedText}>未保存</Text>
+              </View>
+            )}
+          </View>
+
+          <View style={styles.headerActions}>
+            <TouchableOpacity onPress={handleSave} style={styles.headerButton}>
+              <Text style={[styles.saveText, { color: hasChanges ? colors.primary : colors.muted }]}>
+                保存
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleShare} style={styles.headerButton}>
+              <IconSymbol name="square.and.arrow.up" size={22} color={colors.foreground} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleDelete} style={styles.headerButton}>
+              <IconSymbol name="trash.fill" size={22} color={colors.error} />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={[styles.editorLayout, isWide && styles.editorLayoutWide]}>
+          {/* Table Editor */}
+          <View style={styles.editorContainer}>
+            <TableEditor
+              tableData={tableData}
+              onTableChange={handleTableChange}
+              editable={!aiLoading}
+            />
+          </View>
+
+          {/* AI Input Bar */}
+          <View style={[styles.aiContainer, isWide && styles.aiContainerWide]}>
+            <AIInputBar
+              onSend={handleAICommand}
+              loading={aiLoading}
+            />
+          </View>
         </View>
       </View>
-
-      {/* Table Editor */}
-      <View style={styles.editorContainer}>
-        <TableEditor
-          tableData={tableData}
-          onTableChange={handleTableChange}
-          editable={!aiLoading}
-        />
-      </View>
-
-      {/* AI Input Bar */}
-      <AIInputBar
-        onSend={handleAICommand}
-        loading={aiLoading}
-      />
 
       {/* Loading Overlay */}
       <LoadingOverlay
@@ -247,6 +258,15 @@ export default function EditorScreen() {
 }
 
 const styles = StyleSheet.create({
+  webContainer: {
+    flex: 1,
+  },
+  webContainerCentered: {
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 1200,
+    paddingHorizontal: 24,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -283,6 +303,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
+  editorLayout: {
+    flex: 1,
+  },
+  editorLayoutWide: {
+    flexDirection: 'row',
+    gap: 16,
+  },
   saveText: {
     fontSize: 15,
     fontWeight: '600',
@@ -290,5 +317,14 @@ const styles = StyleSheet.create({
   editorContainer: {
     flex: 1,
     padding: 16,
+  },
+  aiContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  aiContainerWide: {
+    flexBasis: 320,
+    maxWidth: 360,
+    paddingRight: 16,
   },
 });
