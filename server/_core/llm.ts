@@ -131,6 +131,10 @@ type GeminiResponse = {
       role?: string;
       parts?: Array<{
         text?: string;
+        functionCall?: {
+          name?: string;
+          args?: Record<string, unknown>;
+        };
       }>;
     };
     finishReason?: string;
@@ -470,13 +474,30 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   const created = Math.floor(Date.now() / 1000);
   const choices =
     data.candidates?.map((candidate, index) => {
-      const textContent =
-        candidate.content?.parts?.map((part) => part.text ?? "").join("") ?? "";
+      const parts = candidate.content?.parts ?? [];
+      const textContent = parts.map((part) => part.text ?? "").join("");
+      const toolCalls: ToolCall[] = parts
+        .map((part, partIndex) => {
+          if (!part.functionCall?.name) {
+            return null;
+          }
+
+          return {
+            id: `call-${index}-${partIndex}`,
+            type: "function",
+            function: {
+              name: part.functionCall.name,
+              arguments: JSON.stringify(part.functionCall.args ?? {}),
+            },
+          };
+        })
+        .filter((call): call is ToolCall => call !== null);
       return {
         index,
         message: {
           role: "assistant" as Role,
           content: textContent,
+          ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
         },
         finish_reason: candidate.finishReason ?? null,
       };
