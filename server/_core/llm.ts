@@ -107,6 +107,37 @@ export type ResponseFormat =
   | { type: "json_object" }
   | { type: "json_schema"; json_schema: JsonSchema };
 
+type GeminiPart =
+  | { text: string }
+  | {
+      inlineData: {
+        mimeType: string;
+        data: string;
+      };
+    };
+
+type GeminiContent = {
+  role: "user" | "model";
+  parts: GeminiPart[];
+};
+
+type GeminiResponse = {
+  candidates?: Array<{
+    content?: {
+      role?: string;
+      parts?: Array<{
+        text?: string;
+      }>;
+    };
+    finishReason?: string;
+  }>;
+  usageMetadata?: {
+    promptTokenCount?: number;
+    candidatesTokenCount?: number;
+    totalTokenCount?: number;
+  };
+};
+
 const ensureArray = (value: MessageContent | MessageContent[]): MessageContent[] =>
   Array.isArray(value) ? value : [value];
 
@@ -164,6 +195,59 @@ const normalizeMessage = (message: Message) => {
   };
 };
 
+const extractBase64Image = (url: string): { mimeType: string; data: string } => {
+  const dataUrlMatch = url.match(/^data:(.+?);base64,(.+)$/);
+  if (dataUrlMatch) {
+    return {
+      mimeType: dataUrlMatch[1],
+      data: dataUrlMatch[2],
+    };
+  }
+
+  const base64Match = url.match(/^base64,(.+)$/);
+  if (base64Match) {
+    return {
+      mimeType: "image/jpeg",
+      data: base64Match[1],
+    };
+  }
+
+  return {
+    mimeType: "image/jpeg",
+    data: url,
+  };
+};
+
+const normalizeGeminiParts = (content: MessageContent | MessageContent[]): GeminiPart[] => {
+  const parts = ensureArray(content).map(normalizeContentPart);
+
+  return parts.map((part) => {
+    if (part.type === "text") {
+      return { text: part.text };
+    }
+
+    if (part.type === "image_url") {
+      const { mimeType, data } = extractBase64Image(part.image_url.url);
+      return {
+        inlineData: {
+          mimeType,
+          data,
+        },
+      };
+    }
+
+    throw new Error("Unsupported Gemini content part");
+  });
+};
+
+const normalizeGeminiMessage = (message: Message): GeminiContent => {
+  const role = message.role === "assistant" ? "model" : "user";
+  return {
+    role,
+    parts: normalizeGeminiParts(message.content),
+  };
+};
+
 const normalizeToolChoice = (
   toolChoice: ToolChoice | undefined,
   tools: Tool[] | undefined,
@@ -202,13 +286,13 @@ const normalizeToolChoice = (
 };
 
 const resolveApiUrl = () =>
-  ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
-    ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`
-    : "https://forge.manus.im/v1/chat/completions";
+  ENV.geminiApiUrl && ENV.geminiApiUrl.trim().length > 0
+    ? ENV.geminiApiUrl.trim()
+    : "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
 
 const assertApiKey = () => {
-  if (!ENV.forgeApiKey) {
-    throw new Error("OPENAI_API_KEY is not configured");
+  if (!ENV.geminiApiKey) {
+    throw new Error("GEMINI_API_KEY is not configured");
   }
 };
 
@@ -267,23 +351,41 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   } = params;
 
   const payload: Record<string, unknown> = {
-    model: "gemini-2.5-flash",
-    messages: messages.map(normalizeMessage),
+    contents: messages.map(normalizeGeminiMessage),
+    generationConfig: {
+      maxOutputTokens: 32768,
+    },
   };
 
   if (tools && tools.length > 0) {
-    payload.tools = tools;
+    payload.tools = [
+      {
+        functionDeclarations: tools.map((tool) => ({
+          name: tool.function.name,
+          description: tool.function.description,
+          parameters: tool.function.parameters,
+        })),
+      },
+    ];
   }
 
   const normalizedToolChoice = normalizeToolChoice(toolChoice || tool_choice, tools);
   if (normalizedToolChoice) {
-    payload.tool_choice = normalizedToolChoice;
+    if (normalizedToolChoice === "none" || normalizedToolChoice === "auto") {
+      payload.toolConfig = {
+        functionCallingConfig: {
+          mode: normalizedToolChoice === "none" ? "NONE" : "AUTO",
+        },
+      };
+    } else {
+      payload.toolConfig = {
+        functionCallingConfig: {
+          mode: "ANY",
+          allowedFunctionNames: [normalizedToolChoice.function.name],
+        },
+      };
+    }
   }
-
-  payload.max_tokens = 32768;
-  payload.thinking = {
-    budget_tokens: 128,
-  };
 
   const normalizedResponseFormat = normalizeResponseFormat({
     responseFormat,
@@ -293,14 +395,23 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   });
 
   if (normalizedResponseFormat) {
-    payload.response_format = normalizedResponseFormat;
+    payload.generationConfig = {
+      ...(payload.generationConfig as Record<string, unknown>),
+      responseMimeType:
+        normalizedResponseFormat.type === "text" ? "text/plain" : "application/json",
+    };
+
+    if (normalizedResponseFormat.type === "json_schema") {
+      (payload.generationConfig as Record<string, unknown>).responseSchema =
+        normalizedResponseFormat.json_schema.schema;
+    }
   }
 
   const response = await fetch(resolveApiUrl(), {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      authorization: `Bearer ${ENV.forgeApiKey}`,
+      "x-goog-api-key": ENV.geminiApiKey,
     },
     body: JSON.stringify(payload),
   });
@@ -310,5 +421,33 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     throw new Error(`LLM invoke failed: ${response.status} ${response.statusText} – ${errorText}`);
   }
 
-  return (await response.json()) as InvokeResult;
+  const data = (await response.json()) as GeminiResponse;
+  const created = Math.floor(Date.now() / 1000);
+  const choices =
+    data.candidates?.map((candidate, index) => {
+      const textContent =
+        candidate.content?.parts?.map((part) => part.text ?? "").join("") ?? "";
+      return {
+        index,
+        message: {
+          role: "assistant" as Role,
+          content: textContent,
+        },
+        finish_reason: candidate.finishReason ?? null,
+      };
+    }) ?? [];
+
+  return {
+    id: `gemini-${created}`,
+    created,
+    model: "gemini-2.0-flash",
+    choices,
+    usage: data.usageMetadata
+      ? {
+          prompt_tokens: data.usageMetadata.promptTokenCount ?? 0,
+          completion_tokens: data.usageMetadata.candidatesTokenCount ?? 0,
+          total_tokens: data.usageMetadata.totalTokenCount ?? 0,
+        }
+      : undefined,
+  };
 }
