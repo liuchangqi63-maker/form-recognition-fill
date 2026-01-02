@@ -4,6 +4,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { invokeLLM } from "./_core/llm";
+import { searchWeb } from "./_core/web-search";
 import type { TableData } from "../shared/types";
 
 // Schema definitions
@@ -124,6 +125,35 @@ export const appRouter = router({
       }))
       .mutation(async ({ input }) => {
         const { tableData, instruction } = input;
+        const maxSearchRows = 5;
+
+        const searchQueries = tableData.rows.slice(0, maxSearchRows).map((row) => {
+          const fieldName = row[0] || "";
+          return `${instruction} ${fieldName}`.trim();
+        });
+
+        const searchResults = await Promise.all(
+          searchQueries.map(async (query) => {
+            try {
+              return await searchWeb(query, { maxResults: 3 });
+            } catch (error) {
+              console.error("Web search failed:", error);
+              return { query, results: [] };
+            }
+          }),
+        );
+        const searchSummaryText = searchResults
+          .map((result, index) => {
+            const fieldName = tableData.rows[index]?.[0] ?? "";
+            const formattedResults = result.results
+              .map(
+                (item, itemIndex) =>
+                  `${itemIndex + 1}. ${item.title}\n   ${item.content}\n   ${item.url}`,
+              )
+              .join("\n");
+            return `字段: ${fieldName}\n查询: ${result.query}\n${formattedResults || "无结果"}`;
+          })
+          .join("\n\n");
 
         // Format the current table for the prompt
         const tableDescription = tableData.rows.map((row, idx) => {
@@ -176,7 +206,10 @@ ${tableDescription}
         const result = await invokeLLM({
           messages: [
             { role: "system", content: systemPrompt },
-            { role: "user", content: `请根据以下指令，为表格中的每一行搜索并填充对应内容。注意：保持表格结构不变，只更新需要填充的内容列。\n\n指令：${instruction}` },
+            {
+              role: "user",
+              content: `请根据以下指令，为表格中的每一行搜索并填充对应内容。注意：保持表格结构不变，只更新需要填充的内容列。\n\n指令：${instruction}\n\n网页搜索结果（可引用真实案例）：\n${searchSummaryText}`,
+            },
           ],
         });
 

@@ -9,6 +9,7 @@ import {
   Alert,
   ActivityIndicator,
   Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -26,6 +27,9 @@ export default function CreateScreen() {
   const colors = useColors();
   const router = useRouter();
   const { createDocument } = useDocuments();
+  const { width } = useWindowDimensions();
+  const isWeb = Platform.OS === 'web';
+  const isWide = isWeb && width >= 900;
   
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -136,137 +140,141 @@ export default function CreateScreen() {
 
   return (
     <ScreenContainer edges={['top', 'left', 'right', 'bottom']}>
-      {/* Header */}
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-          <IconSymbol name="arrow.left" size={24} color={colors.foreground} />
-        </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.foreground }]}>新建表格</Text>
-        <View style={styles.placeholder} />
-      </View>
-
-      <ScrollView
-        style={styles.content}
-        contentContainerStyle={styles.contentContainer}
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* Title Input */}
-        <View style={styles.section}>
-          <Text style={[styles.label, { color: colors.foreground }]}>表格标题</Text>
-          <TextInput
-            value={title}
-            onChangeText={setTitle}
-            placeholder="输入表格标题（可选）"
-            placeholderTextColor={colors.muted}
-            style={[
-              styles.input,
-              {
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-                color: colors.foreground,
-              },
-            ]}
-          />
+      <View style={[styles.webContainer, isWeb && styles.webContainerCentered]}>
+        {/* Header */}
+        <View style={[styles.header, { borderBottomColor: colors.border }]}>
+          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+            <IconSymbol name="arrow.left" size={24} color={colors.foreground} />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>新建表格</Text>
+          <View style={styles.placeholder} />
         </View>
 
-        {/* Description Input */}
-        <View style={styles.section}>
-          <Text style={[styles.label, { color: colors.foreground }]}>表格说明</Text>
-          <TextInput
-            value={description}
-            onChangeText={setDescription}
-            placeholder="描述表格的主题和用途（可选）"
-            placeholderTextColor={colors.muted}
-            multiline
-            numberOfLines={3}
-            style={[
-              styles.textArea,
-              {
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-                color: colors.foreground,
-              },
-            ]}
-          />
-        </View>
-
-        {/* Image Recognition Section */}
-        <View style={styles.section}>
-          <Text style={[styles.label, { color: colors.foreground }]}>从图片识别</Text>
-          <Text style={[styles.hint, { color: colors.muted }]}>
-            上传包含表格的图片，AI 将自动识别并转换为可编辑表格
-          </Text>
-          
-          <View style={styles.imageButtons}>
-            <TouchableOpacity
-              onPress={() => pickImage(true)}
-              style={[styles.imageButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
-            >
-              <IconSymbol name="camera.fill" size={32} color={colors.primary} />
-              <Text style={[styles.imageButtonText, { color: colors.foreground }]}>拍照</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              onPress={() => pickImage(false)}
-              style={[styles.imageButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
-            >
-              <IconSymbol name="photo.fill" size={32} color={colors.primary} />
-              <Text style={[styles.imageButtonText, { color: colors.foreground }]}>相册</Text>
-            </TouchableOpacity>
+        <ScrollView
+          style={styles.content}
+          contentContainerStyle={styles.contentContainer}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Title Input */}
+          <View style={styles.section}>
+            <Text style={[styles.label, { color: colors.foreground }]}>表格标题</Text>
+            <TextInput
+              value={title}
+              onChangeText={setTitle}
+              placeholder="输入表格标题（可选）"
+              placeholderTextColor={colors.muted}
+              style={[
+                styles.input,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  color: colors.foreground,
+                },
+              ]}
+            />
           </View>
 
-          {selectedImage && (
-            <View style={[styles.selectedImageBadge, { backgroundColor: colors.success + '20' }]}>
-              <Text style={[styles.selectedImageText, { color: colors.success }]}>
-                ✓ 已选择图片
+          <View style={[styles.section, isWide && styles.sectionRow]}>
+            {/* Description Input */}
+            <View style={styles.sectionBlock}>
+              <Text style={[styles.label, { color: colors.foreground }]}>表格说明</Text>
+              <TextInput
+                value={description}
+                onChangeText={setDescription}
+                placeholder="描述表格的主题和用途（可选）"
+                placeholderTextColor={colors.muted}
+                multiline
+                numberOfLines={3}
+                style={[
+                  styles.textArea,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                    color: colors.foreground,
+                  },
+                ]}
+              />
+            </View>
+
+            {/* Image Recognition Section */}
+            <View style={styles.sectionBlock}>
+              <Text style={[styles.label, { color: colors.foreground }]}>从图片识别</Text>
+              <Text style={[styles.hint, { color: colors.muted }]}>
+                上传包含表格的图片，AI 将自动识别并转换为可编辑表格
               </Text>
-              <TouchableOpacity onPress={() => setSelectedImage(null)}>
-                <Text style={[styles.removeText, { color: colors.error }]}>移除</Text>
+
+              <View style={styles.imageButtons}>
+                <TouchableOpacity
+                  onPress={() => pickImage(true)}
+                  style={[styles.imageButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                >
+                  <IconSymbol name="camera.fill" size={28} color={colors.primary} />
+                  <Text style={[styles.imageButtonText, { color: colors.foreground }]}>拍照</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => pickImage(false)}
+                  style={[styles.imageButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                >
+                  <IconSymbol name="photo.fill" size={28} color={colors.primary} />
+                  <Text style={[styles.imageButtonText, { color: colors.foreground }]}>相册</Text>
+                </TouchableOpacity>
+              </View>
+
+              {selectedImage && (
+                <View style={[styles.selectedImageBadge, { backgroundColor: colors.success + '20' }]}>
+                  <Text style={[styles.selectedImageText, { color: colors.success }]}>
+                    ✓ 已选择图片
+                  </Text>
+                  <TouchableOpacity onPress={() => setSelectedImage(null)}>
+                    <Text style={[styles.removeText, { color: colors.error }]}>移除</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              <TouchableOpacity
+                onPress={handleCreateFromImage}
+                disabled={!selectedImage || loading}
+                style={[
+                  styles.primaryButton,
+                  {
+                    backgroundColor: selectedImage && !loading ? colors.primary : colors.surface,
+                    opacity: selectedImage && !loading ? 1 : 0.6,
+                  },
+                ]}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={[styles.primaryButtonText, { color: selectedImage ? '#fff' : colors.muted }]}>
+                    识别并创建表格
+                  </Text>
+                )}
               </TouchableOpacity>
             </View>
-          )}
+          </View>
 
-          <TouchableOpacity
-            onPress={handleCreateFromImage}
-            disabled={!selectedImage || loading}
-            style={[
-              styles.primaryButton,
-              {
-                backgroundColor: selectedImage && !loading ? colors.primary : colors.surface,
-                opacity: selectedImage && !loading ? 1 : 0.6,
-              },
-            ]}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={[styles.primaryButtonText, { color: selectedImage ? '#fff' : colors.muted }]}>
-                识别并创建表格
+          {/* Divider */}
+          <View style={styles.dividerContainer}>
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
+            <Text style={[styles.dividerText, { color: colors.muted }]}>或者</Text>
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          </View>
+
+          {/* Create Blank */}
+          <View style={styles.section}>
+            <TouchableOpacity
+              onPress={handleCreateBlank}
+              style={[styles.secondaryButton, { borderColor: colors.primary }]}
+            >
+              <IconSymbol name="tablecells.fill" size={20} color={colors.primary} />
+              <Text style={[styles.secondaryButtonText, { color: colors.primary }]}>
+                创建空白表格
               </Text>
-            )}
-          </TouchableOpacity>
-        </View>
-
-        {/* Divider */}
-        <View style={styles.dividerContainer}>
-          <View style={[styles.divider, { backgroundColor: colors.border }]} />
-          <Text style={[styles.dividerText, { color: colors.muted }]}>或者</Text>
-          <View style={[styles.divider, { backgroundColor: colors.border }]} />
-        </View>
-
-        {/* Create Blank */}
-        <View style={styles.section}>
-          <TouchableOpacity
-            onPress={handleCreateBlank}
-            style={[styles.secondaryButton, { borderColor: colors.primary }]}
-          >
-            <IconSymbol name="tablecells.fill" size={20} color={colors.primary} />
-            <Text style={[styles.secondaryButtonText, { color: colors.primary }]}>
-              创建空白表格
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </View>
 
       {/* Loading Overlay */}
       <LoadingOverlay
@@ -278,6 +286,15 @@ export default function CreateScreen() {
 }
 
 const styles = StyleSheet.create({
+  webContainer: {
+    flex: 1,
+  },
+  webContainerCentered: {
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 1100,
+    paddingHorizontal: 24,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -301,6 +318,13 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     padding: 16,
+  },
+  sectionRow: {
+    flexDirection: 'row',
+    gap: 24,
+  },
+  sectionBlock: {
+    flex: 1,
   },
   section: {
     marginBottom: 24,
