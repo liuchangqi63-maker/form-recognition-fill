@@ -121,12 +121,26 @@ type GeminiContent = {
   parts: GeminiPart[];
 };
 
+<<<<<<< HEAD
+type GeminiSystemInstruction = {
+  parts: GeminiPart[];
+};
+
+=======
+>>>>>>> origin/main
 type GeminiResponse = {
   candidates?: Array<{
     content?: {
       role?: string;
       parts?: Array<{
         text?: string;
+<<<<<<< HEAD
+        functionCall?: {
+          name?: string;
+          args?: Record<string, unknown>;
+        };
+=======
+>>>>>>> origin/main
       }>;
     };
     finishReason?: string;
@@ -248,6 +262,41 @@ const normalizeGeminiMessage = (message: Message): GeminiContent => {
   };
 };
 
+<<<<<<< HEAD
+const splitGeminiMessages = (
+  messages: Message[],
+): { systemInstruction?: GeminiSystemInstruction; contents: GeminiContent[] } => {
+  const systemParts: GeminiPart[] = [];
+  const contents: GeminiContent[] = [];
+
+  for (const message of messages) {
+    if (message.role === "system") {
+      systemParts.push(...normalizeGeminiParts(message.content));
+      continue;
+    }
+
+    if (message.role === "tool" || message.role === "function") {
+      const serialized = ensureArray(message.content)
+        .map((part) => (typeof part === "string" ? part : JSON.stringify(part)))
+        .join("\n");
+      contents.push({
+        role: "user",
+        parts: [{ text: serialized }],
+      });
+      continue;
+    }
+
+    contents.push(normalizeGeminiMessage(message));
+  }
+
+  return {
+    systemInstruction: systemParts.length > 0 ? { parts: systemParts } : undefined,
+    contents,
+  };
+};
+
+=======
+>>>>>>> origin/main
 const normalizeToolChoice = (
   toolChoice: ToolChoice | undefined,
   tools: Tool[] | undefined,
@@ -348,14 +397,29 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     output_schema,
     responseFormat,
     response_format,
+    maxTokens,
+    max_tokens,
   } = params;
 
+  const { systemInstruction, contents } = splitGeminiMessages(messages);
+  const resolvedMaxTokens = maxTokens ?? max_tokens ?? 32768;
+
   const payload: Record<string, unknown> = {
+<<<<<<< HEAD
+    contents,
+    generationConfig: {
+      maxOutputTokens: resolvedMaxTokens,
+=======
     contents: messages.map(normalizeGeminiMessage),
     generationConfig: {
       maxOutputTokens: 32768,
+>>>>>>> origin/main
     },
   };
+
+  if (systemInstruction) {
+    payload.systemInstruction = systemInstruction;
+  }
 
   if (tools && tools.length > 0) {
     payload.tools = [
@@ -425,13 +489,38 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   const created = Math.floor(Date.now() / 1000);
   const choices =
     data.candidates?.map((candidate, index) => {
+<<<<<<< HEAD
+      const parts = candidate.content?.parts ?? [];
+      const textContent = parts.map((part) => part.text ?? "").join("");
+      const toolCalls: ToolCall[] = parts
+        .map((part, partIndex) => {
+          if (!part.functionCall?.name) {
+            return null;
+          }
+
+          return {
+            id: `call-${index}-${partIndex}`,
+            type: "function",
+            function: {
+              name: part.functionCall.name,
+              arguments: JSON.stringify(part.functionCall.args ?? {}),
+            },
+          };
+        })
+        .filter((call): call is ToolCall => call !== null);
+=======
       const textContent =
         candidate.content?.parts?.map((part) => part.text ?? "").join("") ?? "";
+>>>>>>> origin/main
       return {
         index,
         message: {
           role: "assistant" as Role,
           content: textContent,
+<<<<<<< HEAD
+          ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
+=======
+>>>>>>> origin/main
         },
         finish_reason: candidate.finishReason ?? null,
       };
